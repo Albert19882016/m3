@@ -57,9 +57,10 @@ type legacyEncodingIndexInfoVersion int
 
 const (
 	// List in reverse order to ensure default value is current version.
-	legacyEncodingIndexVersionCurrent legacyEncodingIndexInfoVersion = iota
+	legacyEncodingIndexVersionCurrent                                = legacyEncodingIndexVersionV3
+	legacyEncodingIndexVersionV1      legacyEncodingIndexInfoVersion = iota
 	legacyEncodingIndexVersionV2
-	legacyEncodingIndexVersionV1
+	legacyEncodingIndexVersionV3
 )
 
 type legacyEncodingOptions struct {
