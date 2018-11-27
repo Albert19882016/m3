@@ -22,6 +22,7 @@ package fs
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -45,7 +46,11 @@ import (
 	"github.com/pborman/uuid"
 )
 
-var timeZero time.Time
+var (
+	timeZero time.Time
+
+	errSnapshotTimeAndIDZero = errors.New("tried to read snapshot time and ID of zero value")
+)
 
 const (
 	dataDirName       = "data"
@@ -81,6 +86,14 @@ type FileSetFile struct {
 // SnapshotTimeAndID returns the snapshot time and id for the given FileSetFile.
 // Value is meaningless if the the FileSetFile is a flush instead of a snapshot.
 func (f *FileSetFile) SnapshotTimeAndID() (time.Time, []byte, error) {
+	if f.IsZero() {
+		return time.Time{}, nil, errSnapshotTimeAndIDZero
+	}
+	if len(f.AbsoluteFilepaths) > 0 && !strings.Contains(f.AbsoluteFilepaths[0], snapshotDirName) {
+		return time.Time{}, nil, fmt.Errorf(
+			"tried to determine snapshimt time and id of non-snapshot: %s", f.AbsoluteFilepaths[0])
+	}
+
 	if !f.CachedSnapshotTime.IsZero() || f.CachedSnapshotID != nil {
 		// Return immediately if we've already cached it.
 		return f.CachedSnapshotTime, f.CachedSnapshotID, nil

@@ -1029,6 +1029,19 @@ func TestSnapshotFileSnapshotTimeAndID(t *testing.T) {
 	require.Equal(t, testSnapshotID, snapshotID)
 }
 
+func TestSnapshotFileSnapshotTimeAndIDZeroValue(t *testing.T) {
+	f := FileSetFile{}
+	_, _, err := f.SnapshotTimeAndID()
+	require.Equal(t, errSnapshotTimeAndIDZero, err)
+}
+
+func TestSnapshotFileSnapshotTimeAndIDNotSnapshot(t *testing.T) {
+	f := FileSetFile{}
+	f.AbsoluteFilepaths = []string{"/var/lib/m3db/data/fileset-data.db"}
+	_, _, err := f.SnapshotTimeAndID()
+	require.Error(t, err)
+}
+
 func createTempFile(t *testing.T) *os.File {
 	fd, err := ioutil.TempFile("", "testfile")
 	require.NoError(t, err)
