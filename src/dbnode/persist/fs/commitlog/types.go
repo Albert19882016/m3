@@ -72,11 +72,11 @@ type CommitLog interface {
 	Close() error
 
 	// ActiveLogs returns a slice of the active commitlogs.
-	ActiveLogs() ([]File, error)
+	ActiveLogs() ([]fs.CommitlogFile, error)
 
 	// RotateLogs rotates the commitlog and returns the File that represents
 	// the new commitlog file.
-	RotateLogs() (File, error)
+	RotateLogs() (fs.CommitlogFile, error)
 }
 
 // Iterator provides an iterator for commit logs
@@ -183,7 +183,7 @@ type Options interface {
 
 // FileFilterPredicate is a predicate that allows the caller to determine
 // which commitlogs the iterator should read from.
-type FileFilterPredicate func(f File) bool
+type FileFilterPredicate func(f fs.CommitlogFile) bool
 
 // SeriesFilterPredicate is a predicate that determines whether datapoints for a given series
 // should be returned from the Commit log reader. The predicate is pushed down to the

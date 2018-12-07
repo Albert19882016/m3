@@ -112,9 +112,9 @@ func (mr *MockCommitLogMockRecorder) Close() *gomock.Call {
 }
 
 // ActiveLogs mocks base method
-func (m *MockCommitLog) ActiveLogs() ([]File, error) {
+func (m *MockCommitLog) ActiveLogs() ([]fs.CommitlogFile, error) {
 	ret := m.ctrl.Call(m, "ActiveLogs")
-	ret0, _ := ret[0].([]File)
+	ret0, _ := ret[0].([]fs.CommitlogFile)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -125,9 +125,9 @@ func (mr *MockCommitLogMockRecorder) ActiveLogs() *gomock.Call {
 }
 
 // RotateLogs mocks base method
-func (m *MockCommitLog) RotateLogs() (File, error) {
+func (m *MockCommitLog) RotateLogs() (fs.CommitlogFile, error) {
 	ret := m.ctrl.Call(m, "RotateLogs")
-	ret0, _ := ret[0].(File)
+	ret0, _ := ret[0].(fs.CommitlogFile)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

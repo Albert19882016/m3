@@ -73,6 +73,14 @@ var (
 
 type fileOpener func(filePath string) (*os.File, error)
 
+// CommitlogFile represents a commit log file and its associated metadata.
+type CommitlogFile struct {
+	FilePath string
+	Start    time.Time
+	Duration time.Duration
+	Index    int64
+}
+
 // FileSetFile represents a set of FileSet files for a given block start
 type FileSetFile struct {
 	ID                FileSetFileIdentifier
