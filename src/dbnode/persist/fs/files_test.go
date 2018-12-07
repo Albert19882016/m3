@@ -604,8 +604,13 @@ func TestSortedSnapshotMetadataFiles(t *testing.T) {
 		filePathPrefix = filepath.Join(dir, "")
 		opts           = testDefaultOpts.
 				SetFilePathPrefix(filePathPrefix)
-		commitlogIdentifier = []byte("commitlog_id")
-		numMetadataFiles    = 10
+		commitlogIdentifier = CommitlogFile{
+			FilePath: "some_path",
+			Start:    time.Time{},
+			Duration: 10 * time.Minute,
+			Index:    0,
+		}
+		numMetadataFiles = 10
 	)
 	defer func() {
 		os.RemoveAll(dir)
@@ -674,8 +679,13 @@ func TestNextSnapshotMetadataFileIndex(t *testing.T) {
 		filePathPrefix = filepath.Join(dir, "")
 		opts           = testDefaultOpts.
 				SetFilePathPrefix(filePathPrefix)
-		commitlogIdentifier = []byte("commitlog_id")
-		numMetadataFiles    = 10
+		commitlogIdentifier = CommitlogFile{
+			FilePath: "some_path",
+			Start:    time.Time{},
+			Duration: 10 * time.Minute,
+			Index:    0,
+		}
+		numMetadataFiles = 10
 	)
 	defer func() {
 		os.RemoveAll(dir)
