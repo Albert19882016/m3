@@ -206,7 +206,7 @@ func (f FileSetFilesSlice) sortByTimeAndVolumeIndexAscending() {
 // physical files on disk.
 type SnapshotMetadata struct {
 	ID                  SnapshotMetadataIdentifier
-	CommitlogIdentifier []byte
+	CommitlogIdentifier CommitlogFile
 	MetadataFilePath    string
 	CheckpointFilePath  string
 }

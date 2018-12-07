@@ -21,6 +21,7 @@
 package fs
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -96,12 +97,17 @@ func (w *SnapshotMetadataReader) Read(id SnapshotMetadataIdentifier) (SnapshotMe
 		return SnapshotMetadata{}, fmt.Errorf("unable to parse UUID: %v, err: %v", protoMetadata.SnapshotUUID, err)
 	}
 
+	commitlogID := &CommitlogFile{}
+	err = json.Unmarshal(protoMetadata.CommitlogID, commitlogID)
+	if err != nil {
+		return SnapshotMetadata{}, err
+	}
 	return SnapshotMetadata{
 		ID: SnapshotMetadataIdentifier{
 			Index: protoMetadata.SnapshotIndex,
 			UUID:  parsedUUID,
 		},
-		CommitlogIdentifier: protoMetadata.CommitlogID,
+		CommitlogIdentifier: *commitlogID,
 		MetadataFilePath:    snapshotMetadataFilePathFromIdentifier(prefix, id),
 		CheckpointFilePath:  snapshotMetadataCheckpointFilePathFromIdentifier(prefix, id),
 	}, nil

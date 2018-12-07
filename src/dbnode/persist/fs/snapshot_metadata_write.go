@@ -21,6 +21,7 @@
 package fs
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -54,7 +55,7 @@ type SnapshotMetadataWriter struct {
 // SnapshotMetadataWriteArgs are the arguments for SnapshotMetadataWriter.Write.
 type SnapshotMetadataWriteArgs struct {
 	ID                  SnapshotMetadataIdentifier
-	CommitlogIdentifier []byte
+	CommitlogIdentifier CommitlogFile
 }
 
 func (w *SnapshotMetadataWriter) Write(args SnapshotMetadataWriteArgs) (finalErr error) {
@@ -103,10 +104,15 @@ func (w *SnapshotMetadataWriter) Write(args SnapshotMetadataWriteArgs) (finalErr
 	w.metadataFdWithDigest.Reset(metadataFile)
 	deferCleanup(w.metadataFdWithDigest.Close)
 
+	// TODO(rartoul): Fix this
+	commitlogIDBytes, err := json.Marshal(args.CommitlogIdentifier)
+	if err != nil {
+		return err
+	}
 	metadataBytes, err := proto.Marshal(&snapshot.Metadata{
 		SnapshotIndex: args.ID.Index,
 		SnapshotUUID:  []byte(args.ID.UUID.String()),
-		CommitlogID:   args.CommitlogIdentifier,
+		CommitlogID:   commitlogIDBytes,
 	})
 	if err != nil {
 		return err
