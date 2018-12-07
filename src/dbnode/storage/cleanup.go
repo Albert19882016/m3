@@ -35,7 +35,7 @@ import (
 	"github.com/uber-go/tally"
 )
 
-type commitLogFilesFn func(commitlog.Options) ([]commitlog.File, []commitlog.ErrorWithPath, error)
+type commitLogFilesFn func(commitlog.Options) ([]fs.CommitlogFile, []commitlog.ErrorWithPath, error)
 
 type deleteFilesFn func(files []string) error
 
@@ -44,7 +44,7 @@ type deleteInactiveDirectoriesFn func(parentDirPath string, activeDirNames []str
 // Narrow interface so as not to expose all the functionality of the commitlog
 // to the cleanup manager.
 type activeCommitlogs interface {
-	ActiveLogs() ([]commitlog.File, error)
+	ActiveLogs() ([]fs.CommitlogFile, error)
 }
 
 type cleanupManager struct {
@@ -93,7 +93,7 @@ func newCleanupManager(
 		nowFn:                       opts.ClockOptions().NowFn(),
 		filePathPrefix:              filePathPrefix,
 		commitLogsDir:               commitLogsDir,
-		commitLogFilesFn:            commitlog.Files,
+		commitLogFilesFn:            fs.CommitlogFiles,
 		deleteFilesFn:               fs.DeleteFiles,
 		deleteInactiveDirectoriesFn: fs.DeleteInactiveDirectories,
 		metrics:                     newCleanupManagerMetrics(scope),
@@ -294,6 +294,53 @@ func (m *cleanupManager) cleanupNamespaceSnapshotFiles(earliestToRetain time.Tim
 	return multiErr.FinalError()
 }
 
+// List all the metadata files on disk
+// Identify the most recent one
+// Delete all snapshot files whose snapshot ID does not match the most recent id from the most recent metadata file
+// Delete all the metadata files before the most recent one
+// Delete all commitlogs before the one whose commilog we identified
+func (m *cleanupManager) cleanupSnapshotsAndCommitlogs() error {
+	namespaces, err := m.database.GetOwnedNamespaces()
+	if err != nil {
+		return err
+	}
+
+	fsOpts := m.opts.CommitLogOptions().FilesystemOptions()
+	metadata, metadataErrorsWithPaths, err := fs.SortedSnapshotMetadataFiles(fsOpts)
+	if err != nil {
+		return err
+	}
+
+	filesToDelete := []string{}
+	mostRecentSnapshot := metadata[len(metadata)-1]
+	for _, ns := range namespaces {
+		for _, s := range ns.GetOwnedShards() {
+			shardSnapshots, err := fs.SnapshotFiles(fsOpts.FilePathPrefix(), ns.ID(), s.ID())
+			if err != nil {
+				// TODO: Multierr?
+				return err
+			}
+
+			for _, snapshot := range shardSnapshots {
+				_, id, err := snapshot.SnapshotTimeAndID()
+				if err != nil {
+					// TODO: Multierr?
+					return err
+				}
+
+				// Check if ID matches
+				if true {
+					filesToDelete = append(filesToDelete, snapshot.AbsoluteFilepaths...)
+				}
+				// If it doesn't, append to list to delete
+				// else continue
+			}
+		}
+	}
+
+	return nil
+}
+
 // commitLogTimes returns the earliest time before which the commit logs are expired,
 // as well as a list of times we need to clean up commit log files for.
 func (m *cleanupManager) commitLogTimes(t time.Time) ([]commitLogFileWithErrorAndPath, error) {
@@ -326,7 +373,7 @@ func (m *cleanupManager) commitLogTimes(t time.Time) ([]commitLogFileWithErrorAn
 		return nil, err
 	}
 
-	shouldCleanupFile := func(f commitlog.File) (bool, error) {
+	shouldCleanupFile := func(f fs.CommitlogFile) (bool, error) {
 		if commitlogsContainPath(activeCommitlogs, f.FilePath) {
 			// An active commitlog should never satisfy all of the constraints
 			// for deleting a commitlog, but skip them for posterity.
@@ -407,7 +454,7 @@ func (m *cleanupManager) commitLogTimes(t time.Time) ([]commitLogFileWithErrorAn
 			"encountered corrupt commitlog file during cleanup, marking file for deletion: %s",
 			errorWithPath.Error())
 		filesToCleanup = append(filesToCleanup, newCommitLogFileWithErrorAndPath(
-			commitlog.File{}, errorWithPath.Path(), err))
+			fs.CommitlogFile{}, errorWithPath.Path(), err))
 	}
 
 	return filesToCleanup, nil
@@ -452,13 +499,13 @@ func (m *cleanupManager) cleanupCommitLogs(filesToCleanup []commitLogFileWithErr
 }
 
 type commitLogFileWithErrorAndPath struct {
-	f    commitlog.File
+	f    fs.CommitlogFile
 	path string
 	err  error
 }
 
 func newCommitLogFileWithErrorAndPath(
-	f commitlog.File, path string, err error) commitLogFileWithErrorAndPath {
+	f fs.CommitlogFile, path string, err error) commitLogFileWithErrorAndPath {
 	return commitLogFileWithErrorAndPath{
 		f:    f,
 		path: path,
@@ -466,7 +513,7 @@ func newCommitLogFileWithErrorAndPath(
 	}
 }
 
-func commitlogsContainPath(commitlogs []commitlog.File, path string) bool {
+func commitlogsContainPath(commitlogs []fs.CommitlogFile, path string) bool {
 	for _, f := range commitlogs {
 		if path == f.FilePath {
 			return true

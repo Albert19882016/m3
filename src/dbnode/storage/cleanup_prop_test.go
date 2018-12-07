@@ -28,6 +28,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/m3db/m3/src/dbnode/persist/fs"
 	"github.com/m3db/m3/src/dbnode/persist/fs/commitlog"
 	"github.com/m3db/m3/src/dbnode/retention"
 	"github.com/m3db/m3/src/dbnode/storage/namespace"
@@ -69,10 +70,10 @@ func newPropTestCleanupMgr(
 		n         = numIntervals(oldest, newest, blockSize)
 		currStart = oldest
 	)
-	cm.commitLogFilesFn = func(_ commitlog.Options) ([]commitlog.File, []commitlog.ErrorWithPath, error) {
-		files := make([]commitlog.File, 0, n)
+	cm.commitLogFilesFn = func(_ commitlog.Options) ([]fs.CommitlogFile, []commitlog.ErrorWithPath, error) {
+		files := make([]fs.CommitlogFile, 0, n)
 		for i := 0; i < n; i++ {
-			files = append(files, commitlog.File{
+			files = append(files, fs.CommitlogFile{
 				Start:    currStart,
 				Duration: blockSize,
 			})
