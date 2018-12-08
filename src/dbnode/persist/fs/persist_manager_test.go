@@ -251,7 +251,7 @@ func TestPersistenceManagerPrepareSnapshotSuccess(t *testing.T) {
 			Index: 0,
 			UUID:  nil,
 		},
-		CommitlogIdentifier: nil,
+		CommitlogIdentifier: persist.CommitlogFile{},
 	}).Return(nil)
 
 	var (

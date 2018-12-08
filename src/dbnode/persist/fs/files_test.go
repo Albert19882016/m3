@@ -604,7 +604,7 @@ func TestSortedSnapshotMetadataFiles(t *testing.T) {
 		filePathPrefix = filepath.Join(dir, "")
 		opts           = testDefaultOpts.
 				SetFilePathPrefix(filePathPrefix)
-		commitlogIdentifier = CommitlogFile{
+		commitlogIdentifier = persist.CommitlogFile{
 			FilePath: "some_path",
 			Start:    time.Time{},
 			Duration: 10 * time.Minute,
@@ -679,7 +679,7 @@ func TestNextSnapshotMetadataFileIndex(t *testing.T) {
 		filePathPrefix = filepath.Join(dir, "")
 		opts           = testDefaultOpts.
 				SetFilePathPrefix(filePathPrefix)
-		commitlogIdentifier = CommitlogFile{
+		commitlogIdentifier = persist.CommitlogFile{
 			FilePath: "some_path",
 			Start:    time.Time{},
 			Duration: 10 * time.Minute,
