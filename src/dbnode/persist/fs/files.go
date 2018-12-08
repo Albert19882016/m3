@@ -73,14 +73,6 @@ var (
 
 type fileOpener func(filePath string) (*os.File, error)
 
-// CommitlogFile represents a commit log file and its associated metadata.
-type CommitlogFile struct {
-	FilePath string
-	Start    time.Time
-	Duration time.Duration
-	Index    int64
-}
-
 // FileSetFile represents a set of FileSet files for a given block start
 type FileSetFile struct {
 	ID                FileSetFileIdentifier
@@ -99,7 +91,7 @@ func (f *FileSetFile) SnapshotTimeAndID() (time.Time, []byte, error) {
 	}
 	if len(f.AbsoluteFilepaths) > 0 && !strings.Contains(f.AbsoluteFilepaths[0], snapshotDirName) {
 		return time.Time{}, nil, fmt.Errorf(
-			"tried to determine snapshimt time and id of non-snapshot: %s", f.AbsoluteFilepaths[0])
+			"tried to determine snapshot time and id of non-snapshot: %s", f.AbsoluteFilepaths[0])
 	}
 
 	if !f.CachedSnapshotTime.IsZero() || f.CachedSnapshotID != nil {
@@ -206,7 +198,7 @@ func (f FileSetFilesSlice) sortByTimeAndVolumeIndexAscending() {
 // physical files on disk.
 type SnapshotMetadata struct {
 	ID                  SnapshotMetadataIdentifier
-	CommitlogIdentifier CommitlogFile
+	CommitlogIdentifier persist.CommitlogFile
 	MetadataFilePath    string
 	CheckpointFilePath  string
 }

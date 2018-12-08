@@ -27,6 +27,7 @@ import (
 
 	"github.com/m3db/m3/src/dbnode/digest"
 	"github.com/m3db/m3/src/dbnode/generated/proto/snapshot"
+	"github.com/m3db/m3/src/dbnode/persist"
 
 	"github.com/pborman/uuid"
 )
@@ -97,7 +98,7 @@ func (w *SnapshotMetadataReader) Read(id SnapshotMetadataIdentifier) (SnapshotMe
 		return SnapshotMetadata{}, fmt.Errorf("unable to parse UUID: %v, err: %v", protoMetadata.SnapshotUUID, err)
 	}
 
-	commitlogID := &CommitlogFile{}
+	commitlogID := &persist.CommitlogFile{}
 	err = json.Unmarshal(protoMetadata.CommitlogID, commitlogID)
 	if err != nil {
 		return SnapshotMetadata{}, err

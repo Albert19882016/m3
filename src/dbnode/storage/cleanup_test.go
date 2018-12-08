@@ -27,7 +27,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/m3db/m3/src/dbnode/persist/fs"
+	"github.com/m3db/m3/src/dbnode/persist"
 	"github.com/m3db/m3/src/dbnode/persist/fs/commitlog"
 	"github.com/m3db/m3/src/dbnode/retention"
 	"github.com/m3db/m3/src/dbnode/storage/namespace"
@@ -74,8 +74,8 @@ func TestCleanupManagerCleanup(t *testing.T) {
 		mgr.opts.CommitLogOptions().
 			SetBlockSize(rOpts.BlockSize()))
 
-	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]fs.CommitlogFile, []commitlog.ErrorWithPath, error) {
-		return []fs.CommitlogFile{
+	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error) {
+		return []persist.CommitlogFile{
 			{FilePath: "foo", Start: timeFor(14400)},
 		}, nil, nil
 	}
@@ -479,11 +479,11 @@ func TestCleanupManagerCommitLogTimesAllFlushed(t *testing.T) {
 	defer ctrl.Finish()
 
 	ns, mgr := newCleanupManagerCommitLogTimesTest(t, ctrl)
-	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]fs.CommitlogFile, []commitlog.ErrorWithPath, error) {
-		return []fs.CommitlogFile{
-			fs.CommitlogFile{Start: time10, Duration: commitLogBlockSize},
-			fs.CommitlogFile{Start: time20, Duration: commitLogBlockSize},
-			fs.CommitlogFile{Start: time30, Duration: commitLogBlockSize},
+	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error) {
+		return []persist.CommitlogFile{
+			persist.CommitlogFile{Start: time10, Duration: commitLogBlockSize},
+			persist.CommitlogFile{Start: time20, Duration: commitLogBlockSize},
+			persist.CommitlogFile{Start: time30, Duration: commitLogBlockSize},
 		}, nil, nil
 	}
 
@@ -506,11 +506,11 @@ func TestCleanupManagerCommitLogTimesMiddlePendingFlush(t *testing.T) {
 	defer ctrl.Finish()
 
 	ns, mgr := newCleanupManagerCommitLogTimesTest(t, ctrl)
-	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]fs.CommitlogFile, []commitlog.ErrorWithPath, error) {
-		return []fs.CommitlogFile{
-			fs.CommitlogFile{Start: time10, Duration: commitLogBlockSize},
-			fs.CommitlogFile{Start: time20, Duration: commitLogBlockSize},
-			fs.CommitlogFile{Start: time30, Duration: commitLogBlockSize},
+	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error) {
+		return []persist.CommitlogFile{
+			persist.CommitlogFile{Start: time10, Duration: commitLogBlockSize},
+			persist.CommitlogFile{Start: time20, Duration: commitLogBlockSize},
+			persist.CommitlogFile{Start: time30, Duration: commitLogBlockSize},
 		}, nil, nil
 	}
 
@@ -534,11 +534,11 @@ func TestCleanupManagerCommitLogTimesStartPendingFlush(t *testing.T) {
 	defer ctrl.Finish()
 
 	ns, mgr := newCleanupManagerCommitLogTimesTest(t, ctrl)
-	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]fs.CommitlogFile, []commitlog.ErrorWithPath, error) {
-		return []fs.CommitlogFile{
-			fs.CommitlogFile{Start: time10, Duration: commitLogBlockSize},
-			fs.CommitlogFile{Start: time20, Duration: commitLogBlockSize},
-			fs.CommitlogFile{Start: time30, Duration: commitLogBlockSize},
+	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error) {
+		return []persist.CommitlogFile{
+			persist.CommitlogFile{Start: time10, Duration: commitLogBlockSize},
+			persist.CommitlogFile{Start: time20, Duration: commitLogBlockSize},
+			persist.CommitlogFile{Start: time30, Duration: commitLogBlockSize},
 		}, nil, nil
 	}
 
@@ -563,11 +563,11 @@ func TestCleanupManagerCommitLogTimesAllPendingFlush(t *testing.T) {
 	defer ctrl.Finish()
 
 	ns, mgr := newCleanupManagerCommitLogTimesTest(t, ctrl)
-	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]fs.CommitlogFile, []commitlog.ErrorWithPath, error) {
-		return []fs.CommitlogFile{
-			fs.CommitlogFile{Start: time10, Duration: commitLogBlockSize},
-			fs.CommitlogFile{Start: time20, Duration: commitLogBlockSize},
-			fs.CommitlogFile{Start: time30, Duration: commitLogBlockSize},
+	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error) {
+		return []persist.CommitlogFile{
+			persist.CommitlogFile{Start: time10, Duration: commitLogBlockSize},
+			persist.CommitlogFile{Start: time20, Duration: commitLogBlockSize},
+			persist.CommitlogFile{Start: time30, Duration: commitLogBlockSize},
 		}, nil, nil
 	}
 
@@ -616,11 +616,11 @@ func TestCleanupManagerCommitLogTimesAllPendingFlushButHaveSnapshot(t *testing.T
 		currentTime        = timeFor(50)
 		commitLogBlockSize = 10 * time.Second
 	)
-	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]fs.CommitlogFile, []commitlog.ErrorWithPath, error) {
-		return []fs.CommitlogFile{
-			fs.CommitlogFile{Start: time10, Duration: commitLogBlockSize},
-			fs.CommitlogFile{Start: time20, Duration: commitLogBlockSize},
-			fs.CommitlogFile{Start: time30, Duration: commitLogBlockSize},
+	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error) {
+		return []persist.CommitlogFile{
+			persist.CommitlogFile{Start: time10, Duration: commitLogBlockSize},
+			persist.CommitlogFile{Start: time20, Duration: commitLogBlockSize},
+			persist.CommitlogFile{Start: time30, Duration: commitLogBlockSize},
 		}, nil, nil
 	}
 
@@ -657,9 +657,9 @@ func TestCleanupManagerCommitLogTimesHandlesIsCapturedBySnapshotError(t *testing
 	defer ctrl.Finish()
 
 	ns, mgr := newCleanupManagerCommitLogTimesTest(t, ctrl)
-	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]fs.CommitlogFile, []commitlog.ErrorWithPath, error) {
-		return []fs.CommitlogFile{
-			fs.CommitlogFile{Start: time30, Duration: commitLogBlockSize},
+	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error) {
+		return []persist.CommitlogFile{
+			persist.CommitlogFile{Start: time30, Duration: commitLogBlockSize},
 		}, nil, nil
 	}
 
@@ -678,11 +678,11 @@ func TestCleanupManagerCommitLogTimesMultiNS(t *testing.T) {
 	defer ctrl.Finish()
 
 	ns1, ns2, mgr := newCleanupManagerCommitLogTimesTestMultiNS(t, ctrl)
-	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]fs.CommitlogFile, []commitlog.ErrorWithPath, error) {
-		return []fs.CommitlogFile{
-			fs.CommitlogFile{Start: time10, Duration: commitLogBlockSize},
-			fs.CommitlogFile{Start: time20, Duration: commitLogBlockSize},
-			fs.CommitlogFile{Start: time30, Duration: commitLogBlockSize},
+	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error) {
+		return []persist.CommitlogFile{
+			persist.CommitlogFile{Start: time10, Duration: commitLogBlockSize},
+			persist.CommitlogFile{Start: time20, Duration: commitLogBlockSize},
+			persist.CommitlogFile{Start: time30, Duration: commitLogBlockSize},
 		}, nil, nil
 	}
 
@@ -731,8 +731,8 @@ func TestCleanupManagerDeletesCorruptCommitLogFiles(t *testing.T) {
 		err    = errors.New("some_error")
 		path   = "path"
 	)
-	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]fs.CommitlogFile, []commitlog.ErrorWithPath, error) {
-		return []fs.CommitlogFile{}, []commitlog.ErrorWithPath{
+	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error) {
+		return []persist.CommitlogFile{}, []commitlog.ErrorWithPath{
 			commitlog.NewErrorWithPath(err, path),
 		}, nil
 	}
@@ -751,12 +751,12 @@ func TestCleanupManagerIgnoresActiveCommitLogFiles(t *testing.T) {
 		err    = errors.New("some_error")
 		path   = "path"
 	)
-	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]fs.CommitlogFile, []commitlog.ErrorWithPath, error) {
-		return []fs.CommitlogFile{}, []commitlog.ErrorWithPath{
+	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error) {
+		return []persist.CommitlogFile{}, []commitlog.ErrorWithPath{
 			commitlog.NewErrorWithPath(err, path),
 		}, nil
 	}
-	mgr.activeCommitlogs = newFakeActiveLogs([]fs.CommitlogFile{
+	mgr.activeCommitlogs = newFakeActiveLogs([]persist.CommitlogFile{
 		{FilePath: path},
 	})
 
@@ -766,10 +766,10 @@ func TestCleanupManagerIgnoresActiveCommitLogFiles(t *testing.T) {
 }
 
 type fakeActiveLogs struct {
-	activeLogs []fs.CommitlogFile
+	activeLogs []persist.CommitlogFile
 }
 
-func (f fakeActiveLogs) ActiveLogs() ([]fs.CommitlogFile, error) {
+func (f fakeActiveLogs) ActiveLogs() ([]persist.CommitlogFile, error) {
 	return f.activeLogs, nil
 }
 
@@ -777,7 +777,7 @@ func newNoopFakeActiveLogs() fakeActiveLogs {
 	return newFakeActiveLogs(nil)
 }
 
-func newFakeActiveLogs(activeLogs []fs.CommitlogFile) fakeActiveLogs {
+func newFakeActiveLogs(activeLogs []persist.CommitlogFile) fakeActiveLogs {
 	return fakeActiveLogs{
 		activeLogs: activeLogs,
 	}

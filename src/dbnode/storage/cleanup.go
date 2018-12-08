@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/m3db/m3/src/dbnode/clock"
+	"github.com/m3db/m3/src/dbnode/persist"
 	"github.com/m3db/m3/src/dbnode/persist/fs"
 	"github.com/m3db/m3/src/dbnode/persist/fs/commitlog"
 	"github.com/m3db/m3/src/dbnode/retention"
@@ -35,7 +36,7 @@ import (
 	"github.com/uber-go/tally"
 )
 
-type commitLogFilesFn func(commitlog.Options) ([]fs.CommitlogFile, []commitlog.ErrorWithPath, error)
+type commitLogFilesFn func(commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error)
 
 type deleteFilesFn func(files []string) error
 
@@ -44,7 +45,7 @@ type deleteInactiveDirectoriesFn func(parentDirPath string, activeDirNames []str
 // Narrow interface so as not to expose all the functionality of the commitlog
 // to the cleanup manager.
 type activeCommitlogs interface {
-	ActiveLogs() ([]fs.CommitlogFile, error)
+	ActiveLogs() ([]persist.CommitlogFile, error)
 }
 
 type cleanupManager struct {
@@ -93,7 +94,7 @@ func newCleanupManager(
 		nowFn:                       opts.ClockOptions().NowFn(),
 		filePathPrefix:              filePathPrefix,
 		commitLogsDir:               commitLogsDir,
-		commitLogFilesFn:            fs.CommitlogFiles,
+		commitLogFilesFn:            commitlog.Files,
 		deleteFilesFn:               fs.DeleteFiles,
 		deleteInactiveDirectoriesFn: fs.DeleteInactiveDirectories,
 		metrics:                     newCleanupManagerMetrics(scope),
@@ -306,13 +307,16 @@ func (m *cleanupManager) cleanupSnapshotsAndCommitlogs() error {
 	}
 
 	fsOpts := m.opts.CommitLogOptions().FilesystemOptions()
-	metadata, metadataErrorsWithPaths, err := fs.SortedSnapshotMetadataFiles(fsOpts)
+	// TODO HANDLE ERRORS WITH PATHS
+	metadata, _, err := fs.SortedSnapshotMetadataFiles(fsOpts)
 	if err != nil {
 		return err
 	}
 
 	filesToDelete := []string{}
+	// TODO: Use this
 	mostRecentSnapshot := metadata[len(metadata)-1]
+	fmt.Println(mostRecentSnapshot)
 	for _, ns := range namespaces {
 		for _, s := range ns.GetOwnedShards() {
 			shardSnapshots, err := fs.SnapshotFiles(fsOpts.FilePathPrefix(), ns.ID(), s.ID())
@@ -322,7 +326,8 @@ func (m *cleanupManager) cleanupSnapshotsAndCommitlogs() error {
 			}
 
 			for _, snapshot := range shardSnapshots {
-				_, id, err := snapshot.SnapshotTimeAndID()
+				// TODO: Use ID
+				_, _, err := snapshot.SnapshotTimeAndID()
 				if err != nil {
 					// TODO: Multierr?
 					return err
@@ -373,7 +378,7 @@ func (m *cleanupManager) commitLogTimes(t time.Time) ([]commitLogFileWithErrorAn
 		return nil, err
 	}
 
-	shouldCleanupFile := func(f fs.CommitlogFile) (bool, error) {
+	shouldCleanupFile := func(f persist.CommitlogFile) (bool, error) {
 		if commitlogsContainPath(activeCommitlogs, f.FilePath) {
 			// An active commitlog should never satisfy all of the constraints
 			// for deleting a commitlog, but skip them for posterity.
@@ -454,7 +459,7 @@ func (m *cleanupManager) commitLogTimes(t time.Time) ([]commitLogFileWithErrorAn
 			"encountered corrupt commitlog file during cleanup, marking file for deletion: %s",
 			errorWithPath.Error())
 		filesToCleanup = append(filesToCleanup, newCommitLogFileWithErrorAndPath(
-			fs.CommitlogFile{}, errorWithPath.Path(), err))
+			persist.CommitlogFile{}, errorWithPath.Path(), err))
 	}
 
 	return filesToCleanup, nil
@@ -499,13 +504,13 @@ func (m *cleanupManager) cleanupCommitLogs(filesToCleanup []commitLogFileWithErr
 }
 
 type commitLogFileWithErrorAndPath struct {
-	f    fs.CommitlogFile
+	f    persist.CommitlogFile
 	path string
 	err  error
 }
 
 func newCommitLogFileWithErrorAndPath(
-	f fs.CommitlogFile, path string, err error) commitLogFileWithErrorAndPath {
+	f persist.CommitlogFile, path string, err error) commitLogFileWithErrorAndPath {
 	return commitLogFileWithErrorAndPath{
 		f:    f,
 		path: path,
@@ -513,7 +518,7 @@ func newCommitLogFileWithErrorAndPath(
 	}
 }
 
-func commitlogsContainPath(commitlogs []fs.CommitlogFile, path string) bool {
+func commitlogsContainPath(commitlogs []persist.CommitlogFile, path string) bool {
 	for _, f := range commitlogs {
 		if path == f.FilePath {
 			return true

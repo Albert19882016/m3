@@ -214,7 +214,7 @@ func (mr *MockSnapshotPreparerMockRecorder) PrepareData(opts interface{}) *gomoc
 }
 
 // DoneSnapshot mocks base method
-func (m *MockSnapshotPreparer) DoneSnapshot(snapshotUUID uuid.UUID, commitLogIdentifier []byte) error {
+func (m *MockSnapshotPreparer) DoneSnapshot(snapshotUUID uuid.UUID, commitLogIdentifier CommitlogFile) error {
 	ret := m.ctrl.Call(m, "DoneSnapshot", snapshotUUID, commitLogIdentifier)
 	ret0, _ := ret[0].(error)
 	return ret0

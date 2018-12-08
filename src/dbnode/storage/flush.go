@@ -183,29 +183,23 @@ func (m *flushManager) snapshot(
 
 	m.setState(flushManagerSnapshotInProgress)
 	maxBlocksSnapshottedByNamespace := 0
+	multiErr := xerrors.NewMultiError()
 	for _, ns := range namespaces {
 		var (
-			snapshotBlockStarts     = m.namespaceSnapshotTimes(ns, tickStart)
-			shardBootstrapTimes, ok = dbBootstrapStateAtTickStart.NamespaceBootstrapStates[ns.ID().String()]
+			snapshotBlockStarts = m.namespaceSnapshotTimes(ns, tickStart)
 		)
-
-		if !ok {
-			// Could happen if namespaces are added / removed.
-			multiErr = multiErr.Add(fmt.Errorf(
-				"tried to flush ns: %s, but did not have shard bootstrap times", ns.ID().String()))
-			continue
-		}
 
 		if len(snapshotBlockStarts) > maxBlocksSnapshottedByNamespace {
 			maxBlocksSnapshottedByNamespace = len(snapshotBlockStarts)
 		}
 		for _, snapshotBlockStart := range snapshotBlockStarts {
 			err := ns.Snapshot(
-				snapshotBlockStart, tickStart, shardBootstrapTimes, flush)
+				snapshotBlockStart, tickStart, snapshotPersist)
 
 			if err != nil {
 				detailedErr := fmt.Errorf("namespace %s failed to snapshot data: %v",
 					ns.ID().String(), err)
+				multiErr = multiErr.Add(detailedErr)
 			}
 		}
 	}
@@ -214,7 +208,7 @@ func (m *flushManager) snapshot(
 	snapshotUUID := uuid.NewUUID()
 	// TODO(rartoul): Fill in the commitlog identifier here once the Rotate() API is hooked
 	// into the snapshotting process.
-	err = snapshotPersist.DoneSnapshot(snapshotUUID, nil)
+	err = snapshotPersist.DoneSnapshot(snapshotUUID, persist.CommitlogFile{})
 	if err != nil {
 		return err
 	}

@@ -153,7 +153,7 @@ func snapshotCounterValue(
 }
 
 type mockCommitLogWriter struct {
-	openFn  func(start time.Time, duration time.Duration) (fs.CommitlogFile, error)
+	openFn  func(start time.Time, duration time.Duration) (persist.CommitlogFile, error)
 	writeFn func(ts.Series, ts.Datapoint, xtime.Unit, ts.Annotation) error
 	flushFn func(sync bool) error
 	closeFn func() error
@@ -161,8 +161,8 @@ type mockCommitLogWriter struct {
 
 func newMockCommitLogWriter() *mockCommitLogWriter {
 	return &mockCommitLogWriter{
-		openFn: func(start time.Time, duration time.Duration) (fs.CommitlogFile, error) {
-			return fs.CommitlogFile{}, nil
+		openFn: func(start time.Time, duration time.Duration) (persist.CommitlogFile, error) {
+			return persist.CommitlogFile{}, nil
 		},
 		writeFn: func(ts.Series, ts.Datapoint, xtime.Unit, ts.Annotation) error {
 			return nil
@@ -176,7 +176,7 @@ func newMockCommitLogWriter() *mockCommitLogWriter {
 	}
 }
 
-func (w *mockCommitLogWriter) Open(start time.Time, duration time.Duration) (fs.CommitlogFile, error) {
+func (w *mockCommitLogWriter) Open(start time.Time, duration time.Duration) (persist.CommitlogFile, error) {
 	return w.openFn(start, duration)
 }
 
@@ -518,7 +518,7 @@ func TestCommitLogIteratorUsesPredicateFilter(t *testing.T) {
 	require.True(t, len(files) == 3)
 
 	// This predicate should eliminate the first commitlog file
-	commitLogPredicate := func(f fs.CommitlogFile) bool {
+	commitLogPredicate := func(f persist.CommitlogFile) bool {
 		return f.Start.After(alignedStart)
 	}
 
@@ -681,11 +681,11 @@ func TestCommitLogFailOnWriteError(t *testing.T) {
 	}
 
 	var opens int64
-	writer.openFn = func(start time.Time, duration time.Duration) (fs.CommitlogFile, error) {
+	writer.openFn = func(start time.Time, duration time.Duration) (persist.CommitlogFile, error) {
 		if atomic.AddInt64(&opens, 1) >= 2 {
-			return fs.CommitlogFile{}, fmt.Errorf("an error")
+			return persist.CommitlogFile{}, fmt.Errorf("an error")
 		}
-		return fs.CommitlogFile{}, nil
+		return persist.CommitlogFile{}, nil
 	}
 
 	writer.flushFn = func(bool) error {
@@ -730,11 +730,11 @@ func TestCommitLogFailOnOpenError(t *testing.T) {
 	writer := newMockCommitLogWriter()
 
 	var opens int64
-	writer.openFn = func(start time.Time, duration time.Duration) (fs.CommitlogFile, error) {
+	writer.openFn = func(start time.Time, duration time.Duration) (persist.CommitlogFile, error) {
 		if atomic.AddInt64(&opens, 1) >= 2 {
-			return fs.CommitlogFile{}, fmt.Errorf("an error")
+			return persist.CommitlogFile{}, fmt.Errorf("an error")
 		}
-		return fs.CommitlogFile{}, nil
+		return persist.CommitlogFile{}, nil
 	}
 
 	writer.flushFn = func(bool) error {

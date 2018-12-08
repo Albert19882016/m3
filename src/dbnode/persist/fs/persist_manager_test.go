@@ -269,7 +269,7 @@ func TestPersistenceManagerPrepareSnapshotSuccess(t *testing.T) {
 	require.NoError(t, err)
 
 	defer func() {
-		assert.NoError(t, flush.DoneSnapshot(nil, nil))
+		assert.NoError(t, flush.DoneSnapshot(nil, persist.CommitlogFile{}))
 	}()
 
 	now := time.Now()

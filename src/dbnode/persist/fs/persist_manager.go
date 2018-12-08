@@ -546,7 +546,7 @@ func (pm *persistManager) DoneFlush() error {
 
 // DoneSnapshot is called by the databaseFlushManager to finish the snapshot persist process.
 func (pm *persistManager) DoneSnapshot(
-	snapshotUUID uuid.UUID, commitLogIdentifier []byte) error {
+	snapshotUUID uuid.UUID, commitLogIdentifier persist.CommitlogFile) error {
 	pm.Lock()
 	defer pm.Unlock()
 

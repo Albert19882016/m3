@@ -44,6 +44,14 @@ type PreparedDataPersist struct {
 	Close   DataCloser
 }
 
+// CommitlogFile represents a commit log file and its associated metadata.
+type CommitlogFile struct {
+	FilePath string
+	Start    time.Time
+	Duration time.Duration
+	Index    int64
+}
+
 // IndexFn is a function that persists a m3ninx MutableSegment.
 type IndexFn func(segment.MutableSegment) error
 
@@ -94,7 +102,7 @@ type SnapshotPreparer interface {
 	Preparer
 
 	// DoneSnapshot marks the snapshot as complete.
-	DoneSnapshot(snapshotUUID uuid.UUID, commitLogIdentifier []byte) error
+	DoneSnapshot(snapshotUUID uuid.UUID, commitLogIdentifier CommitlogFile) error
 }
 
 // IndexFlush is a persist flush cycle, each namespace, block combination needs

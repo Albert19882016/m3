@@ -27,6 +27,7 @@ import (
 
 	"github.com/m3db/m3/src/dbnode/digest"
 	"github.com/m3db/m3/src/dbnode/generated/proto/snapshot"
+	"github.com/m3db/m3/src/dbnode/persist"
 	xerrors "github.com/m3db/m3x/errors"
 
 	"github.com/gogo/protobuf/proto"
@@ -55,7 +56,7 @@ type SnapshotMetadataWriter struct {
 // SnapshotMetadataWriteArgs are the arguments for SnapshotMetadataWriter.Write.
 type SnapshotMetadataWriteArgs struct {
 	ID                  SnapshotMetadataIdentifier
-	CommitlogIdentifier CommitlogFile
+	CommitlogIdentifier persist.CommitlogFile
 }
 
 func (w *SnapshotMetadataWriter) Write(args SnapshotMetadataWriteArgs) (finalErr error) {
