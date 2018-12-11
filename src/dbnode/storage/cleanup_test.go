@@ -94,8 +94,12 @@ func TestCleanupManagerCleanupCommitlogsAndSnapshots(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	testSnapshotUUID := uuid.Parse("a6367b49-9c83-4706-bd5c-400a4a9ec77c")
-	require.NotNil(t, testSnapshotUUID)
+	testBlockStart := time.Now().Truncate(2 * time.Hour)
+	testSnapshotUUID1 := uuid.Parse("a6367b49-9c83-4706-bd5c-400a4a9ec77c")
+	require.NotNil(t, testSnapshotUUID1)
+
+	testSnapshotUUID2 := uuid.Parse("bed2156f-182a-47ea-83ff-0a55d34c8a82")
+	require.NotNil(t, testSnapshotUUID2)
 
 	testCommitlogFileIdentifier := persist.CommitlogFile{
 		FilePath: "commitlog-filepath-1",
@@ -103,12 +107,22 @@ func TestCleanupManagerCleanupCommitlogsAndSnapshots(t *testing.T) {
 		Duration: 10 * time.Minute,
 		Index:    0,
 	}
-	testSnapshotMetadataIdentifier := fs.SnapshotMetadataIdentifier{
+	testSnapshotMetadataIdentifier1 := fs.SnapshotMetadataIdentifier{
 		Index: 0,
-		UUID:  testSnapshotUUID,
+		UUID:  testSnapshotUUID1,
 	}
-	testSnapshotMetadata := fs.SnapshotMetadata{
-		ID:                  testSnapshotMetadataIdentifier,
+	testSnapshotMetadataIdentifier2 := fs.SnapshotMetadataIdentifier{
+		Index: 0,
+		UUID:  testSnapshotUUID2,
+	}
+	testSnapshotMetadata1 := fs.SnapshotMetadata{
+		ID:                  testSnapshotMetadataIdentifier1,
+		CommitlogIdentifier: testCommitlogFileIdentifier,
+		MetadataFilePath:    "metadata-filepath-1",
+		CheckpointFilePath:  "checkpoint-filepath-1",
+	}
+	testSnapshotMetadata2 := fs.SnapshotMetadata{
+		ID:                  testSnapshotMetadataIdentifier2,
 		CommitlogIdentifier: testCommitlogFileIdentifier,
 		MetadataFilePath:    "metadata-filepath-1",
 		CheckpointFilePath:  "checkpoint-filepath-1",
@@ -128,9 +142,62 @@ func TestCleanupManagerCleanupCommitlogsAndSnapshots(t *testing.T) {
 			},
 		},
 		{
-			title: "Does nothing if no snapshot metadata files",
+			title: "Does not delete snapshots associated with the most recent snapshot metadata file",
 			snapshotMetadata: func(fs.Options) ([]fs.SnapshotMetadata, []fs.SnapshotMetadataErrorWithPaths, error) {
-				return []fs.SnapshotMetadata{testSnapshotMetadata}, nil, nil
+				return []fs.SnapshotMetadata{testSnapshotMetadata1}, nil, nil
+			},
+			snapshots: func(filePathPrefix string, namespace ident.ID, shard uint32) (fs.FileSetFilesSlice, error) {
+				return fs.FileSetFilesSlice{
+					{
+						ID: fs.FileSetFileIdentifier{
+							Namespace:   namespace,
+							BlockStart:  testBlockStart,
+							Shard:       shard,
+							VolumeIndex: 0,
+						},
+						AbsoluteFilepaths:  []string{fmt.Sprintf("/snapshots/%s/snapshot-filepath-%d", namespace, shard)},
+						CachedSnapshotTime: testBlockStart,
+						CachedSnapshotID:   testSnapshotUUID1,
+					},
+				}, nil
+			},
+			commitlogs: func(commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error) {
+				return nil, nil, nil
+			},
+		},
+		{
+			title: "Does delete snapshots not associated with the most recent snapshot metadata file",
+			snapshotMetadata: func(fs.Options) ([]fs.SnapshotMetadata, []fs.SnapshotMetadataErrorWithPaths, error) {
+				return []fs.SnapshotMetadata{testSnapshotMetadata2}, nil, nil
+			},
+			snapshots: func(filePathPrefix string, namespace ident.ID, shard uint32) (fs.FileSetFilesSlice, error) {
+				return fs.FileSetFilesSlice{
+					{
+						ID: fs.FileSetFileIdentifier{
+							Namespace:   namespace,
+							BlockStart:  testBlockStart,
+							Shard:       shard,
+							VolumeIndex: 0,
+						},
+						AbsoluteFilepaths:  []string{fmt.Sprintf("/snapshots/%s/snapshot-filepath-%d", namespace, shard)},
+						CachedSnapshotTime: testBlockStart,
+						CachedSnapshotID:   testSnapshotUUID1,
+					},
+				}, nil
+			},
+			commitlogs: func(commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error) {
+				return nil, nil, nil
+			},
+			expectedDeletedFiles: []string{
+				"/snapshots/ns0/snapshot-filepath-0",
+				"/snapshots/ns0/snapshot-filepath-1",
+				"/snapshots/ns0/snapshot-filepath-2",
+				"/snapshots/ns1/snapshot-filepath-0",
+				"/snapshots/ns1/snapshot-filepath-1",
+				"/snapshots/ns1/snapshot-filepath-2",
+				"/snapshots/ns2/snapshot-filepath-0",
+				"/snapshots/ns2/snapshot-filepath-1",
+				"/snapshots/ns2/snapshot-filepath-2",
 			},
 		},
 	}
@@ -180,6 +247,8 @@ func TestCleanupManagerCleanupCommitlogsAndSnapshots(t *testing.T) {
 		require.NoError(t, mgr.Cleanup(ts))
 		require.Equal(t, tc.expectedDeletedFiles, deletedFiles)
 	}
+
+	panic("wtf")
 }
 
 func TestCleanupManagerNamespaceCleanup(t *testing.T) {

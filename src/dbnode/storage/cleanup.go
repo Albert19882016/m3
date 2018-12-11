@@ -370,7 +370,7 @@ func (m *cleanupManager) cleanupSnapshotsAndCommitlogs() error {
 		filesToDelete = append(filesToDelete, errorWithPath.Path())
 	}
 
-	return nil
+	return m.deleteFilesFn(filesToDelete)
 }
 
 // TODO: Delete if unused
