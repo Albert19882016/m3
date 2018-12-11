@@ -79,13 +79,13 @@ type FileSetFile struct {
 	AbsoluteFilepaths []string
 
 	CachedSnapshotTime time.Time
-	CachedSnapshotID   []byte
+	CachedSnapshotID   uuid.UUID
 	filePathPrefix     string
 }
 
 // SnapshotTimeAndID returns the snapshot time and id for the given FileSetFile.
 // Value is meaningless if the the FileSetFile is a flush instead of a snapshot.
-func (f *FileSetFile) SnapshotTimeAndID() (time.Time, []byte, error) {
+func (f *FileSetFile) SnapshotTimeAndID() (time.Time, uuid.UUID, error) {
 	if f.IsZero() {
 		return time.Time{}, nil, errSnapshotTimeAndIDZero
 	}
@@ -384,7 +384,7 @@ func timeAndIndexFromFileName(fname string, componentPosition int) (time.Time, i
 
 // SnapshotTimeAndID returns the metadata for the snapshot.
 func SnapshotTimeAndID(
-	filePathPrefix string, id FileSetFileIdentifier) (time.Time, []byte, error) {
+	filePathPrefix string, id FileSetFileIdentifier) (time.Time, uuid.UUID, error) {
 	decoder := msgpack.NewDecoder(nil)
 	return snapshotTimeAndID(filePathPrefix, id, decoder)
 }
@@ -393,7 +393,7 @@ func snapshotTimeAndID(
 	filePathPrefix string,
 	id FileSetFileIdentifier,
 	decoder *msgpack.Decoder,
-) (time.Time, []byte, error) {
+) (time.Time, uuid.UUID, error) {
 	infoBytes, err := readSnapshotInfoFile(filePathPrefix, id, defaultBufioReaderSize)
 	if err != nil {
 		return time.Time{}, nil, fmt.Errorf("error reading snapshot info file: %v", err)
@@ -404,7 +404,14 @@ func snapshotTimeAndID(
 	if err != nil {
 		return time.Time{}, nil, fmt.Errorf("error decoding snapshot info file: %v", err)
 	}
-	return time.Unix(0, info.SnapshotTime), info.SnapshotID, nil
+
+	var parsedSnapshotID uuid.UUID
+	err = parsedSnapshotID.UnmarshalBinary(info.SnapshotID)
+	if err != nil {
+		return time.Time{}, nil, fmt.Errorf("error parsing snapshot ID from snapshot info file: %v", err)
+	}
+
+	return time.Unix(0, info.SnapshotTime), parsedSnapshotID, nil
 }
 
 func readSnapshotInfoFile(filePathPrefix string, id FileSetFileIdentifier, readerBufferSize int) ([]byte, error) {
