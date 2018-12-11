@@ -84,8 +84,8 @@ func TestCleanupManagerCleanupCommitlogsAndSnapshots(t *testing.T) {
 	testSnapshotMetadata1 := fs.SnapshotMetadata{
 		ID:                  testSnapshotMetadataIdentifier2,
 		CommitlogIdentifier: testCommitlogFileIdentifier,
-		MetadataFilePath:    "metadata-filepath-0",
-		CheckpointFilePath:  "checkpoint-filepath-0",
+		MetadataFilePath:    "metadata-filepath-1",
+		CheckpointFilePath:  "checkpoint-filepath-1",
 	}
 
 	testCases := []struct {
@@ -158,6 +158,28 @@ func TestCleanupManagerCleanupCommitlogsAndSnapshots(t *testing.T) {
 				"/snapshots/ns2/snapshot-filepath-0",
 				"/snapshots/ns2/snapshot-filepath-1",
 				"/snapshots/ns2/snapshot-filepath-2",
+				"metadata-filepath-0",
+				"checkpoint-filepath-0",
+			},
+		},
+		{
+			title: "Deletes corrupt snapshot metadata",
+			snapshotMetadata: func(fs.Options) ([]fs.SnapshotMetadata, []fs.SnapshotMetadataErrorWithPaths, error) {
+				return []fs.SnapshotMetadata{testSnapshotMetadata1}, []fs.SnapshotMetadataErrorWithPaths{
+					{
+						Error:              errors.New("some-error"),
+						MetadataFilePath:   "metadata-filepath-0",
+						CheckpointFilePath: "checkpoint-filepath-0",
+					},
+				}, nil
+			},
+			snapshots: func(filePathPrefix string, namespace ident.ID, shard uint32) (fs.FileSetFilesSlice, error) {
+				return nil, nil
+			},
+			commitlogs: func(commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error) {
+				return nil, nil, nil
+			},
+			expectedDeletedFiles: []string{
 				"metadata-filepath-0",
 				"checkpoint-filepath-0",
 			},
