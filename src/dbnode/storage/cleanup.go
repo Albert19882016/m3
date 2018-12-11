@@ -32,6 +32,8 @@ import (
 	"github.com/m3db/m3/src/dbnode/retention"
 	xerrors "github.com/m3db/m3x/errors"
 	"github.com/m3db/m3x/ident"
+	xlog "github.com/m3db/m3x/log"
+	"github.com/pborman/uuid"
 
 	"github.com/uber-go/tally"
 )
@@ -66,17 +68,22 @@ type cleanupManager struct {
 }
 
 type cleanupManagerMetrics struct {
-	status               tally.Gauge
-	corruptCommitlogFile tally.Counter
-	deletedCommitlogFile tally.Counter
+	status                      tally.Gauge
+	corruptCommitlogFile        tally.Counter
+	corruptSnapshotMetadataFile tally.Counter
+	deletedCommitlogFile        tally.Counter
+	deletedSnapshotMetadataFile tally.Counter
 }
 
 func newCleanupManagerMetrics(scope tally.Scope) cleanupManagerMetrics {
 	clScope := scope.SubScope("commitlog")
+	smScope := scope.SubScope("snapshot-metadata")
 	return cleanupManagerMetrics{
-		status:               scope.Gauge("cleanup"),
-		corruptCommitlogFile: clScope.Counter("corrupt"),
-		deletedCommitlogFile: clScope.Counter("deleted"),
+		status:                      scope.Gauge("cleanup"),
+		corruptCommitlogFile:        clScope.Counter("corrupt"),
+		corruptSnapshotMetadataFile: smScope.Counter("corrupt"),
+		deletedCommitlogFile:        clScope.Counter("deleted"),
+		deletedSnapshotMetadataFile: smScope.Counter("deleted"),
 	}
 }
 
@@ -307,18 +314,24 @@ func (m *cleanupManager) cleanupSnapshotsAndCommitlogs() error {
 	}
 
 	fsOpts := m.opts.CommitLogOptions().FilesystemOptions()
-	// TODO HANDLE ERRORS WITH PATHS
-	metadata, _, err := fs.SortedSnapshotMetadataFiles(fsOpts)
+	sortedSnapshotMetadatas, snapshotMetadataErrorsWithPaths, err := fs.SortedSnapshotMetadataFiles(fsOpts)
 	if err != nil {
 		return err
 	}
 
-	filesToDelete := []string{}
-	// TODO: Use this
-	mostRecentSnapshot := metadata[len(metadata)-1]
-	fmt.Println(mostRecentSnapshot)
+	if len(sortedSnapshotMetadatas) == 0 {
+		// No cleanup can be performed until we have at least one complete snapshot.
+		return nil
+	}
+
+	var (
+		filesToDelete      = []string{}
+		mostRecentSnapshot = sortedSnapshotMetadatas[len(sortedSnapshotMetadatas)-1]
+	)
+
 	for _, ns := range namespaces {
 		for _, s := range ns.GetOwnedShards() {
+			// TODO: Need to make sure we can handle corrupt files.
 			shardSnapshots, err := fs.SnapshotFiles(fsOpts.FilePathPrefix(), ns.ID(), s.ID())
 			if err != nil {
 				// TODO: Multierr?
@@ -326,21 +339,69 @@ func (m *cleanupManager) cleanupSnapshotsAndCommitlogs() error {
 			}
 
 			for _, snapshot := range shardSnapshots {
-				// TODO: Use ID
-				_, _, err := snapshot.SnapshotTimeAndID()
+				_, snapshotID, err := snapshot.SnapshotTimeAndID()
 				if err != nil {
 					// TODO: Multierr?
 					return err
 				}
 
-				// Check if ID matches
-				if true {
+				if !uuid.Equal(snapshotID, mostRecentSnapshot.ID.UUID) {
+					// If the UUID of the snapshot files doesn't match the most recent snapshot
+					// then its safe to delete because it means we have a more recently complete set.
 					filesToDelete = append(filesToDelete, snapshot.AbsoluteFilepaths...)
 				}
-				// If it doesn't, append to list to delete
-				// else continue
 			}
 		}
+	}
+
+	// TODO: Handle corrupt files
+	// TODO: Handle active logs files (actually might not need this)
+	files, commitlogErrorsWithPaths, err := m.commitLogFilesFn(m.opts.CommitLogOptions())
+	if err != nil {
+		return err
+	}
+
+	// Delete all commitlog files prior to the one captured by the most recent snapshot.
+	for _, file := range files {
+		if file.Index < mostRecentSnapshot.CommitlogIdentifier.Index {
+			m.metrics.deletedCommitlogFile.Inc(1)
+			filesToDelete = append(filesToDelete, file.FilePath)
+		}
+	}
+
+	// Delete all snapshot metadatas prior to the most recent one.
+	for _, snapshot := range sortedSnapshotMetadatas[:len(sortedSnapshotMetadatas)-1] {
+		m.metrics.deletedSnapshotMetadataFile.Inc(1)
+		filesToDelete = append(filesToDelete, snapshot.AbsoluteFilepaths()...)
+	}
+
+	// Delete corrupt snapshot metadata files.
+	for _, errorWithPath := range snapshotMetadataErrorsWithPaths {
+		m.metrics.corruptSnapshotMetadataFile.Inc(1)
+		// TODO: Comment.
+		m.opts.InstrumentOptions().Logger().WithFields(
+			xlog.NewField("err", errorWithPath.Error),
+			xlog.NewField("metadataFilePath", errorWithPath.MetadataFilePath),
+			xlog.NewField("checkpointFilePath", errorWithPath.CheckpointFilePath),
+		).Errorf(
+			"encountered corrupt snapshot metadata file during cleanup, marking files for deletion")
+		filesToDelete = append(filesToDelete, errorWithPath.MetadataFilePath)
+		filesToDelete = append(filesToDelete, errorWithPath.CheckpointFilePath)
+	}
+
+	// Delete corrupt commitlog files.
+	for _, errorWithPath := range commitlogErrorsWithPaths {
+		m.metrics.corruptCommitlogFile.Inc(1)
+		// If we were unable to read the commit log files info header, then we're forced to assume
+		// that the file is corrupt and remove it. This can happen in situations where M3DB experiences
+		// sudden shutdown.
+		m.opts.InstrumentOptions().Logger().WithFields(
+			xlog.NewField("err", errorWithPath.Error()),
+			xlog.NewField("path", errorWithPath.Path()),
+		).Errorf(
+			"encountered corrupt commitlog file during cleanup, marking file for deletion: %s",
+			errorWithPath.Error())
+		filesToDelete = append(filesToDelete, errorWithPath.Path())
 	}
 
 	return nil

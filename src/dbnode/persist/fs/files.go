@@ -203,6 +203,12 @@ type SnapshotMetadata struct {
 	CheckpointFilePath  string
 }
 
+// AbsoluteFilepaths returns a slice of all the absolute filepaths associated
+// with a snapshot metadata.
+func (s SnapshotMetadata) AbsoluteFilepaths() []string {
+	return []string{s.MetadataFilePath, s.CheckpointFilePath}
+}
+
 // SnapshotMetadataErrorWithPaths contains an error that occurred while trying to
 // read a snapshot metadata file, as well as paths for the metadata file path and
 // the checkpoint file path so that they can be cleaned up. The checkpoint file may
