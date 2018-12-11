@@ -39,6 +39,9 @@ import (
 )
 
 type commitLogFilesFn func(commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error)
+type sortedSnapshotMetadataFilesFn func(fs.Options) ([]fs.SnapshotMetadata, []fs.SnapshotMetadataErrorWithPaths, error)
+
+type snapshotFilesFn func(filePathPrefix string, namespace ident.ID, shard uint32) (fs.FileSetFilesSlice, error)
 
 type deleteFilesFn func(files []string) error
 
@@ -56,11 +59,14 @@ type cleanupManager struct {
 	database         database
 	activeCommitlogs activeCommitlogs
 
-	opts                        Options
-	nowFn                       clock.NowFn
-	filePathPrefix              string
-	commitLogsDir               string
-	commitLogFilesFn            commitLogFilesFn
+	opts                          Options
+	nowFn                         clock.NowFn
+	filePathPrefix                string
+	commitLogsDir                 string
+	commitLogFilesFn              commitLogFilesFn
+	sortedSnapshotMetadataFilesFn sortedSnapshotMetadataFilesFn
+	snapshotFilesFn               snapshotFilesFn
+
 	deleteFilesFn               deleteFilesFn
 	deleteInactiveDirectoriesFn deleteInactiveDirectoriesFn
 	cleanupInProgress           bool
@@ -97,14 +103,16 @@ func newCleanupManager(
 		database:         database,
 		activeCommitlogs: activeLogs,
 
-		opts:                        opts,
-		nowFn:                       opts.ClockOptions().NowFn(),
-		filePathPrefix:              filePathPrefix,
-		commitLogsDir:               commitLogsDir,
-		commitLogFilesFn:            commitlog.Files,
-		deleteFilesFn:               fs.DeleteFiles,
-		deleteInactiveDirectoriesFn: fs.DeleteInactiveDirectories,
-		metrics:                     newCleanupManagerMetrics(scope),
+		opts:                          opts,
+		nowFn:                         opts.ClockOptions().NowFn(),
+		filePathPrefix:                filePathPrefix,
+		commitLogsDir:                 commitLogsDir,
+		commitLogFilesFn:              commitlog.Files,
+		sortedSnapshotMetadataFilesFn: fs.SortedSnapshotMetadataFiles,
+		snapshotFilesFn:               fs.SnapshotFiles,
+		deleteFilesFn:                 fs.DeleteFiles,
+		deleteInactiveDirectoriesFn:   fs.DeleteInactiveDirectories,
+		metrics:                       newCleanupManagerMetrics(scope),
 	}
 }
 
@@ -332,7 +340,7 @@ func (m *cleanupManager) cleanupSnapshotsAndCommitlogs() error {
 	for _, ns := range namespaces {
 		for _, s := range ns.GetOwnedShards() {
 			// TODO: Need to make sure we can handle corrupt files.
-			shardSnapshots, err := fs.SnapshotFiles(fsOpts.FilePathPrefix(), ns.ID(), s.ID())
+			shardSnapshots, err := m.snapshotFilesFn(fsOpts.FilePathPrefix(), ns.ID(), s.ID())
 			if err != nil {
 				// TODO: Multierr?
 				return err

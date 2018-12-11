@@ -80,8 +80,6 @@ type filesetBeforeFn func(
 	t time.Time,
 ) ([]string, error)
 
-type snapshotFilesFn func(filePathPrefix string, namespace ident.ID, shard uint32) (fs.FileSetFilesSlice, error)
-
 type tickPolicy int
 
 const (
