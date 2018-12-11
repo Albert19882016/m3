@@ -50,47 +50,6 @@ var (
 	commitLogBlockSize = 10 * time.Second
 )
 
-func TestCleanupManagerCleanup(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	ts := timeFor(36000)
-	rOpts := retention.NewOptions().
-		SetRetentionPeriod(21600 * time.Second).
-		SetBlockSize(7200 * time.Second)
-	nsOpts := namespace.NewOptions().SetRetentionOptions(rOpts)
-
-	namespaces := make([]databaseNamespace, 0, 3)
-	for i := 0; i < 3; i++ {
-		ns := NewMockdatabaseNamespace(ctrl)
-		ns.EXPECT().ID().Return(ident.StringID(fmt.Sprintf("ns%d", i))).AnyTimes()
-		ns.EXPECT().Options().Return(nsOpts).AnyTimes()
-		ns.EXPECT().NeedsFlush(gomock.Any(), gomock.Any()).Return(false).AnyTimes()
-		ns.EXPECT().GetOwnedShards().Return(nil).AnyTimes()
-		namespaces = append(namespaces, ns)
-	}
-	db := newMockdatabase(ctrl, namespaces...)
-	db.EXPECT().GetOwnedNamespaces().Return(namespaces, nil).AnyTimes()
-	mgr := newCleanupManager(db, newNoopFakeActiveLogs(), tally.NoopScope).(*cleanupManager)
-	mgr.opts = mgr.opts.SetCommitLogOptions(
-		mgr.opts.CommitLogOptions().
-			SetBlockSize(rOpts.BlockSize()))
-
-	mgr.commitLogFilesFn = func(_ commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error) {
-		return []persist.CommitlogFile{
-			{FilePath: "foo", Start: timeFor(14400)},
-		}, nil, nil
-	}
-	var deletedFiles []string
-	mgr.deleteFilesFn = func(files []string) error {
-		deletedFiles = append(deletedFiles, files...)
-		return nil
-	}
-
-	require.NoError(t, mgr.Cleanup(ts))
-	require.Equal(t, []string{"foo"}, deletedFiles)
-}
-
 func TestCleanupManagerCleanupCommitlogsAndSnapshots(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -405,7 +364,6 @@ func TestCleanupDataAndSnapshotFileSetFiles(t *testing.T) {
 	shard := NewMockdatabaseShard(ctrl)
 	expectedEarliestToRetain := retention.FlushTimeStart(ns.Options().RetentionOptions(), ts)
 	shard.EXPECT().CleanupExpiredFileSets(expectedEarliestToRetain).Return(nil)
-	shard.EXPECT().CleanupSnapshots(expectedEarliestToRetain)
 	shard.EXPECT().ID().Return(uint32(0)).AnyTimes()
 	ns.EXPECT().GetOwnedShards().Return([]databaseShard{shard}).AnyTimes()
 	ns.EXPECT().ID().Return(ident.StringID("nsID")).AnyTimes()
