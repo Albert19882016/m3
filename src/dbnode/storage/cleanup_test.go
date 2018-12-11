@@ -21,6 +21,7 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -95,37 +96,37 @@ func TestCleanupManagerCleanupCommitlogsAndSnapshots(t *testing.T) {
 	defer ctrl.Finish()
 
 	testBlockStart := time.Now().Truncate(2 * time.Hour)
-	testSnapshotUUID1 := uuid.Parse("a6367b49-9c83-4706-bd5c-400a4a9ec77c")
-	require.NotNil(t, testSnapshotUUID1)
+	testSnapshotUUID0 := uuid.Parse("a6367b49-9c83-4706-bd5c-400a4a9ec77c")
+	require.NotNil(t, testSnapshotUUID0)
 
-	testSnapshotUUID2 := uuid.Parse("bed2156f-182a-47ea-83ff-0a55d34c8a82")
-	require.NotNil(t, testSnapshotUUID2)
+	testSnapshotUUID1 := uuid.Parse("bed2156f-182a-47ea-83ff-0a55d34c8a82")
+	require.NotNil(t, testSnapshotUUID1)
 
 	testCommitlogFileIdentifier := persist.CommitlogFile{
 		FilePath: "commitlog-filepath-1",
 		Start:    time.Now().Truncate(10 * time.Minute),
 		Duration: 10 * time.Minute,
-		Index:    0,
+		Index:    1,
 	}
 	testSnapshotMetadataIdentifier1 := fs.SnapshotMetadataIdentifier{
 		Index: 0,
-		UUID:  testSnapshotUUID1,
+		UUID:  testSnapshotUUID0,
 	}
 	testSnapshotMetadataIdentifier2 := fs.SnapshotMetadataIdentifier{
 		Index: 0,
-		UUID:  testSnapshotUUID2,
+		UUID:  testSnapshotUUID1,
 	}
-	testSnapshotMetadata1 := fs.SnapshotMetadata{
+	testSnapshotMetadata0 := fs.SnapshotMetadata{
 		ID:                  testSnapshotMetadataIdentifier1,
 		CommitlogIdentifier: testCommitlogFileIdentifier,
-		MetadataFilePath:    "metadata-filepath-1",
-		CheckpointFilePath:  "checkpoint-filepath-1",
+		MetadataFilePath:    "metadata-filepath-0",
+		CheckpointFilePath:  "checkpoint-filepath-0",
 	}
-	testSnapshotMetadata2 := fs.SnapshotMetadata{
+	testSnapshotMetadata1 := fs.SnapshotMetadata{
 		ID:                  testSnapshotMetadataIdentifier2,
 		CommitlogIdentifier: testCommitlogFileIdentifier,
-		MetadataFilePath:    "metadata-filepath-1",
-		CheckpointFilePath:  "checkpoint-filepath-1",
+		MetadataFilePath:    "metadata-filepath-0",
+		CheckpointFilePath:  "checkpoint-filepath-0",
 	}
 
 	testCases := []struct {
@@ -144,7 +145,7 @@ func TestCleanupManagerCleanupCommitlogsAndSnapshots(t *testing.T) {
 		{
 			title: "Does not delete snapshots associated with the most recent snapshot metadata file",
 			snapshotMetadata: func(fs.Options) ([]fs.SnapshotMetadata, []fs.SnapshotMetadataErrorWithPaths, error) {
-				return []fs.SnapshotMetadata{testSnapshotMetadata1}, nil, nil
+				return []fs.SnapshotMetadata{testSnapshotMetadata0}, nil, nil
 			},
 			snapshots: func(filePathPrefix string, namespace ident.ID, shard uint32) (fs.FileSetFilesSlice, error) {
 				return fs.FileSetFilesSlice{
@@ -157,7 +158,7 @@ func TestCleanupManagerCleanupCommitlogsAndSnapshots(t *testing.T) {
 						},
 						AbsoluteFilepaths:  []string{fmt.Sprintf("/snapshots/%s/snapshot-filepath-%d", namespace, shard)},
 						CachedSnapshotTime: testBlockStart,
-						CachedSnapshotID:   testSnapshotUUID1,
+						CachedSnapshotID:   testSnapshotUUID0,
 					},
 				}, nil
 			},
@@ -166,9 +167,9 @@ func TestCleanupManagerCleanupCommitlogsAndSnapshots(t *testing.T) {
 			},
 		},
 		{
-			title: "Does delete snapshots not associated with the most recent snapshot metadata file",
+			title: "Deletes snapshots and metadata not associated with the most recent snapshot metadata file",
 			snapshotMetadata: func(fs.Options) ([]fs.SnapshotMetadata, []fs.SnapshotMetadataErrorWithPaths, error) {
-				return []fs.SnapshotMetadata{testSnapshotMetadata2}, nil, nil
+				return []fs.SnapshotMetadata{testSnapshotMetadata0, testSnapshotMetadata1}, nil, nil
 			},
 			snapshots: func(filePathPrefix string, namespace ident.ID, shard uint32) (fs.FileSetFilesSlice, error) {
 				return fs.FileSetFilesSlice{
@@ -181,7 +182,46 @@ func TestCleanupManagerCleanupCommitlogsAndSnapshots(t *testing.T) {
 						},
 						AbsoluteFilepaths:  []string{fmt.Sprintf("/snapshots/%s/snapshot-filepath-%d", namespace, shard)},
 						CachedSnapshotTime: testBlockStart,
-						CachedSnapshotID:   testSnapshotUUID1,
+						CachedSnapshotID:   testSnapshotUUID0,
+					},
+				}, nil
+			},
+			commitlogs: func(commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error) {
+				return nil, nil, nil
+			},
+			expectedDeletedFiles: []string{
+				"/snapshots/ns0/snapshot-filepath-0",
+				"/snapshots/ns0/snapshot-filepath-1",
+				"/snapshots/ns0/snapshot-filepath-2",
+				"/snapshots/ns1/snapshot-filepath-0",
+				"/snapshots/ns1/snapshot-filepath-1",
+				"/snapshots/ns1/snapshot-filepath-2",
+				"/snapshots/ns2/snapshot-filepath-0",
+				"/snapshots/ns2/snapshot-filepath-1",
+				"/snapshots/ns2/snapshot-filepath-2",
+				"metadata-filepath-0",
+				"checkpoint-filepath-0",
+			},
+		},
+		{
+			title: "Deletes corrupt snapshot files",
+			snapshotMetadata: func(fs.Options) ([]fs.SnapshotMetadata, []fs.SnapshotMetadataErrorWithPaths, error) {
+				return []fs.SnapshotMetadata{testSnapshotMetadata0}, nil, nil
+			},
+			snapshots: func(filePathPrefix string, namespace ident.ID, shard uint32) (fs.FileSetFilesSlice, error) {
+				return fs.FileSetFilesSlice{
+					{
+						ID: fs.FileSetFileIdentifier{
+							Namespace:   namespace,
+							BlockStart:  testBlockStart,
+							Shard:       shard,
+							VolumeIndex: 0,
+						},
+						AbsoluteFilepaths: []string{fmt.Sprintf("/snapshots/%s/snapshot-filepath-%d", namespace, shard)},
+						// Zero these out so it will try to look them up and return an error, indicating the files
+						// are corrupt.
+						CachedSnapshotTime: time.Time{},
+						CachedSnapshotID:   nil,
 					},
 				}, nil
 			},
@@ -200,55 +240,91 @@ func TestCleanupManagerCleanupCommitlogsAndSnapshots(t *testing.T) {
 				"/snapshots/ns2/snapshot-filepath-2",
 			},
 		},
+		{
+			title: "Does not delete the commitlog identified in the most recent snapshot metadata file, or any with a higher index",
+			snapshotMetadata: func(fs.Options) ([]fs.SnapshotMetadata, []fs.SnapshotMetadataErrorWithPaths, error) {
+				return []fs.SnapshotMetadata{testSnapshotMetadata0}, nil, nil
+			},
+			snapshots: func(filePathPrefix string, namespace ident.ID, shard uint32) (fs.FileSetFilesSlice, error) {
+				return nil, nil
+			},
+			commitlogs: func(commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error) {
+				return []persist.CommitlogFile{
+					{FilePath: "commitlog-file-0", Index: 0},
+					// Index 1, the one pointed to bby testSnapshotMetdata1
+					testCommitlogFileIdentifier,
+					{FilePath: "commitlog-file-2", Index: 2},
+				}, nil, nil
+			},
+			// Should only delete anything with an index lower than 1.
+			expectedDeletedFiles: []string{"commitlog-file-0"},
+		},
+		{
+			title: "Deletes all corrupt commitlog files",
+			snapshotMetadata: func(fs.Options) ([]fs.SnapshotMetadata, []fs.SnapshotMetadataErrorWithPaths, error) {
+				return []fs.SnapshotMetadata{testSnapshotMetadata0}, nil, nil
+			},
+			snapshots: func(filePathPrefix string, namespace ident.ID, shard uint32) (fs.FileSetFilesSlice, error) {
+				return nil, nil
+			},
+			commitlogs: func(commitlog.Options) ([]persist.CommitlogFile, []commitlog.ErrorWithPath, error) {
+				return nil, []commitlog.ErrorWithPath{
+					commitlog.NewErrorWithPath(errors.New("some-error-0"), "corrupt-commitlog-file-0"),
+					commitlog.NewErrorWithPath(errors.New("some-error-1"), "corrupt-commitlog-file-1"),
+				}, nil
+			},
+			// Should only delete anything with an index lower than 1.
+			expectedDeletedFiles: []string{"corrupt-commitlog-file-0", "corrupt-commitlog-file-1"},
+		},
 	}
 
 	for _, tc := range testCases {
-		ts := timeFor(36000)
-		rOpts := retention.NewOptions().
-			SetRetentionPeriod(21600 * time.Second).
-			SetBlockSize(7200 * time.Second)
-		nsOpts := namespace.NewOptions().SetRetentionOptions(rOpts)
+		t.Run(tc.title, func(t *testing.T) {
+			ts := timeFor(36000)
+			rOpts := retention.NewOptions().
+				SetRetentionPeriod(21600 * time.Second).
+				SetBlockSize(7200 * time.Second)
+			nsOpts := namespace.NewOptions().SetRetentionOptions(rOpts)
 
-		namespaces := make([]databaseNamespace, 0, 3)
-		shards := make([]databaseShard, 0, 3)
-		for i := 0; i < 3; i++ {
-			shard := NewMockdatabaseShard(ctrl)
-			shard.EXPECT().ID().Return(uint32(i)).AnyTimes()
-			shard.EXPECT().CleanupExpiredFileSets(gomock.Any()).Return(nil).AnyTimes()
-			shards = append(shards, shard)
-		}
+			namespaces := make([]databaseNamespace, 0, 3)
+			shards := make([]databaseShard, 0, 3)
+			for i := 0; i < 3; i++ {
+				shard := NewMockdatabaseShard(ctrl)
+				shard.EXPECT().ID().Return(uint32(i)).AnyTimes()
+				shard.EXPECT().CleanupExpiredFileSets(gomock.Any()).Return(nil).AnyTimes()
+				shards = append(shards, shard)
+			}
 
-		for i := 0; i < 3; i++ {
-			ns := NewMockdatabaseNamespace(ctrl)
-			ns.EXPECT().ID().Return(ident.StringID(fmt.Sprintf("ns%d", i))).AnyTimes()
-			ns.EXPECT().Options().Return(nsOpts).AnyTimes()
-			ns.EXPECT().NeedsFlush(gomock.Any(), gomock.Any()).Return(false).AnyTimes()
-			ns.EXPECT().GetOwnedShards().Return(shards).AnyTimes()
-			namespaces = append(namespaces, ns)
-		}
+			for i := 0; i < 3; i++ {
+				ns := NewMockdatabaseNamespace(ctrl)
+				ns.EXPECT().ID().Return(ident.StringID(fmt.Sprintf("ns%d", i))).AnyTimes()
+				ns.EXPECT().Options().Return(nsOpts).AnyTimes()
+				ns.EXPECT().NeedsFlush(gomock.Any(), gomock.Any()).Return(false).AnyTimes()
+				ns.EXPECT().GetOwnedShards().Return(shards).AnyTimes()
+				namespaces = append(namespaces, ns)
+			}
 
-		db := newMockdatabase(ctrl, namespaces...)
-		db.EXPECT().GetOwnedNamespaces().Return(namespaces, nil).AnyTimes()
-		mgr := newCleanupManager(db, newNoopFakeActiveLogs(), tally.NoopScope).(*cleanupManager)
-		mgr.opts = mgr.opts.SetCommitLogOptions(
-			mgr.opts.CommitLogOptions().
-				SetBlockSize(rOpts.BlockSize()))
+			db := newMockdatabase(ctrl, namespaces...)
+			db.EXPECT().GetOwnedNamespaces().Return(namespaces, nil).AnyTimes()
+			mgr := newCleanupManager(db, newNoopFakeActiveLogs(), tally.NoopScope).(*cleanupManager)
+			mgr.opts = mgr.opts.SetCommitLogOptions(
+				mgr.opts.CommitLogOptions().
+					SetBlockSize(rOpts.BlockSize()))
 
-		mgr.sortedSnapshotMetadataFilesFn = tc.snapshotMetadata
-		mgr.commitLogFilesFn = tc.commitlogs
-		mgr.snapshotFilesFn = tc.snapshots
+			mgr.sortedSnapshotMetadataFilesFn = tc.snapshotMetadata
+			mgr.commitLogFilesFn = tc.commitlogs
+			mgr.snapshotFilesFn = tc.snapshots
 
-		var deletedFiles []string
-		mgr.deleteFilesFn = func(files []string) error {
-			deletedFiles = append(deletedFiles, files...)
-			return nil
-		}
+			var deletedFiles []string
+			mgr.deleteFilesFn = func(files []string) error {
+				deletedFiles = append(deletedFiles, files...)
+				return nil
+			}
 
-		require.NoError(t, mgr.Cleanup(ts))
-		require.Equal(t, tc.expectedDeletedFiles, deletedFiles)
+			require.NoError(t, mgr.Cleanup(ts))
+			require.Equal(t, tc.expectedDeletedFiles, deletedFiles)
+		})
 	}
-
-	panic("wtf")
 }
 
 func TestCleanupManagerNamespaceCleanup(t *testing.T) {

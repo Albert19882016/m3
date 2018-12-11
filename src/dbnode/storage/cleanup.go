@@ -308,8 +308,15 @@ func (m *cleanupManager) cleanupSnapshotsAndCommitlogs() error {
 			for _, snapshot := range shardSnapshots {
 				_, snapshotID, err := snapshot.SnapshotTimeAndID()
 				if err != nil {
-					// TODO: Multierr?
-					return err
+					// TODO: Comment
+					// TODO: Need to distingush between FS error and corrupt errors
+					m.opts.InstrumentOptions().Logger().WithFields(
+						xlog.NewField("err", err),
+						xlog.NewField("files", snapshot.AbsoluteFilepaths),
+					).Errorf(
+						"encountered corrupt snapshot file during cleanup, marking files for deletion")
+					filesToDelete = append(filesToDelete, snapshot.AbsoluteFilepaths...)
+					continue
 				}
 
 				if !uuid.Equal(snapshotID, mostRecentSnapshot.ID.UUID) {
