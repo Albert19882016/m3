@@ -281,7 +281,7 @@ func (m *cleanupManager) cleanupSnapshotsAndCommitlogs() error {
 	}
 
 	fsOpts := m.opts.CommitLogOptions().FilesystemOptions()
-	sortedSnapshotMetadatas, snapshotMetadataErrorsWithPaths, err := fs.SortedSnapshotMetadataFiles(fsOpts)
+	sortedSnapshotMetadatas, snapshotMetadataErrorsWithPaths, err := m.sortedSnapshotMetadataFilesFn(fsOpts)
 	if err != nil {
 		return err
 	}

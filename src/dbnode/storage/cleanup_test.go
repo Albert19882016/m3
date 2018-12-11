@@ -27,11 +27,13 @@ import (
 	"time"
 
 	"github.com/m3db/m3/src/dbnode/persist"
+	"github.com/m3db/m3/src/dbnode/persist/fs"
 	"github.com/m3db/m3/src/dbnode/persist/fs/commitlog"
 	"github.com/m3db/m3/src/dbnode/retention"
 	"github.com/m3db/m3/src/dbnode/storage/namespace"
 	"github.com/m3db/m3x/ident"
 	xtest "github.com/m3db/m3x/test"
+	"github.com/pborman/uuid"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -86,6 +88,98 @@ func TestCleanupManagerCleanup(t *testing.T) {
 
 	require.NoError(t, mgr.Cleanup(ts))
 	require.Equal(t, []string{"foo"}, deletedFiles)
+}
+
+func TestCleanupManagerCleanupCommitlogsAndSnapshots(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	testSnapshotUUID := uuid.Parse("a6367b49-9c83-4706-bd5c-400a4a9ec77c")
+	require.NotNil(t, testSnapshotUUID)
+
+	testCommitlogFileIdentifier := persist.CommitlogFile{
+		FilePath: "commitlog-filepath-1",
+		Start:    time.Now().Truncate(10 * time.Minute),
+		Duration: 10 * time.Minute,
+		Index:    0,
+	}
+	testSnapshotMetadataIdentifier := fs.SnapshotMetadataIdentifier{
+		Index: 0,
+		UUID:  testSnapshotUUID,
+	}
+	testSnapshotMetadata := fs.SnapshotMetadata{
+		ID:                  testSnapshotMetadataIdentifier,
+		CommitlogIdentifier: testCommitlogFileIdentifier,
+		MetadataFilePath:    "metadata-filepath-1",
+		CheckpointFilePath:  "checkpoint-filepath-1",
+	}
+
+	testCases := []struct {
+		title                string
+		snapshotMetadata     sortedSnapshotMetadataFilesFn
+		commitlogs           commitLogFilesFn
+		snapshots            snapshotFilesFn
+		expectedDeletedFiles []string
+	}{
+		{
+			title: "Does nothing if no snapshot metadata files",
+			snapshotMetadata: func(fs.Options) ([]fs.SnapshotMetadata, []fs.SnapshotMetadataErrorWithPaths, error) {
+				return nil, nil, nil
+			},
+		},
+		{
+			title: "Does nothing if no snapshot metadata files",
+			snapshotMetadata: func(fs.Options) ([]fs.SnapshotMetadata, []fs.SnapshotMetadataErrorWithPaths, error) {
+				return []fs.SnapshotMetadata{testSnapshotMetadata}, nil, nil
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		ts := timeFor(36000)
+		rOpts := retention.NewOptions().
+			SetRetentionPeriod(21600 * time.Second).
+			SetBlockSize(7200 * time.Second)
+		nsOpts := namespace.NewOptions().SetRetentionOptions(rOpts)
+
+		namespaces := make([]databaseNamespace, 0, 3)
+		shards := make([]databaseShard, 0, 3)
+		for i := 0; i < 3; i++ {
+			shard := NewMockdatabaseShard(ctrl)
+			shard.EXPECT().ID().Return(uint32(i)).AnyTimes()
+			shard.EXPECT().CleanupExpiredFileSets(gomock.Any()).Return(nil).AnyTimes()
+			shards = append(shards, shard)
+		}
+
+		for i := 0; i < 3; i++ {
+			ns := NewMockdatabaseNamespace(ctrl)
+			ns.EXPECT().ID().Return(ident.StringID(fmt.Sprintf("ns%d", i))).AnyTimes()
+			ns.EXPECT().Options().Return(nsOpts).AnyTimes()
+			ns.EXPECT().NeedsFlush(gomock.Any(), gomock.Any()).Return(false).AnyTimes()
+			ns.EXPECT().GetOwnedShards().Return(shards).AnyTimes()
+			namespaces = append(namespaces, ns)
+		}
+
+		db := newMockdatabase(ctrl, namespaces...)
+		db.EXPECT().GetOwnedNamespaces().Return(namespaces, nil).AnyTimes()
+		mgr := newCleanupManager(db, newNoopFakeActiveLogs(), tally.NoopScope).(*cleanupManager)
+		mgr.opts = mgr.opts.SetCommitLogOptions(
+			mgr.opts.CommitLogOptions().
+				SetBlockSize(rOpts.BlockSize()))
+
+		mgr.sortedSnapshotMetadataFilesFn = tc.snapshotMetadata
+		mgr.commitLogFilesFn = tc.commitlogs
+		mgr.snapshotFilesFn = tc.snapshots
+
+		var deletedFiles []string
+		mgr.deleteFilesFn = func(files []string) error {
+			deletedFiles = append(deletedFiles, files...)
+			return nil
+		}
+
+		require.NoError(t, mgr.Cleanup(ts))
+		require.Equal(t, tc.expectedDeletedFiles, deletedFiles)
+	}
 }
 
 func TestCleanupManagerNamespaceCleanup(t *testing.T) {
