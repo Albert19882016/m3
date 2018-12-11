@@ -138,11 +138,6 @@ func (m *cleanupManager) Cleanup(t time.Time) error {
 			"encountered errors when cleaning up index files for %v: %v", t, err))
 	}
 
-	if err := m.cleanupDataSnapshotFiles(t); err != nil {
-		multiErr = multiErr.Add(fmt.Errorf(
-			"encountered errors when cleaning up snapshot files for %v: %v", t, err))
-	}
-
 	if err := m.deleteInactiveDataFiles(); err != nil {
 		multiErr = multiErr.Add(fmt.Errorf(
 			"encountered errors when deleting inactive data files for %v: %v", t, err))
@@ -158,19 +153,10 @@ func (m *cleanupManager) Cleanup(t time.Time) error {
 			"encountered errors when deleting inactive namespace files for %v: %v", t, err))
 	}
 
-	filesToCleanup, err := m.commitLogTimes(t)
-	if err != nil {
+	if err := m.cleanupSnapshotsAndCommitlogs(); err != nil {
 		multiErr = multiErr.Add(fmt.Errorf(
-			"encountered errors when cleaning up commit logs: %v", err))
-		return multiErr.FinalError()
+			"encountered errors when cleaning up snapshot and commitlog files: %v", err))
 	}
-
-	if err := m.cleanupCommitLogs(filesToCleanup); err != nil {
-		multiErr = multiErr.Add(fmt.Errorf(
-			"encountered errors when cleaning up commit logs for commitLogFiles %v: %v",
-			filesToCleanup, err))
-	}
-	m.metrics.deletedCommitlogFile.Inc(int64(len(filesToCleanup)))
 
 	return multiErr.FinalError()
 }
@@ -272,37 +258,10 @@ func (m *cleanupManager) cleanupExpiredIndexFiles(t time.Time) error {
 	return multiErr.FinalError()
 }
 
-func (m *cleanupManager) cleanupDataSnapshotFiles(t time.Time) error {
-	multiErr := xerrors.NewMultiError()
-	namespaces, err := m.database.GetOwnedNamespaces()
-	if err != nil {
-		return err
-	}
-	for _, n := range namespaces {
-		earliestToRetain := retention.FlushTimeStart(n.Options().RetentionOptions(), t)
-		shards := n.GetOwnedShards()
-		if n.Options().CleanupEnabled() {
-			multiErr = multiErr.Add(m.cleanupNamespaceSnapshotFiles(earliestToRetain, shards))
-		}
-	}
-	return multiErr.FinalError()
-}
-
 func (m *cleanupManager) cleanupExpiredNamespaceDataFiles(earliestToRetain time.Time, shards []databaseShard) error {
 	multiErr := xerrors.NewMultiError()
 	for _, shard := range shards {
 		if err := shard.CleanupExpiredFileSets(earliestToRetain); err != nil {
-			multiErr = multiErr.Add(err)
-		}
-	}
-
-	return multiErr.FinalError()
-}
-
-func (m *cleanupManager) cleanupNamespaceSnapshotFiles(earliestToRetain time.Time, shards []databaseShard) error {
-	multiErr := xerrors.NewMultiError()
-	for _, shard := range shards {
-		if err := shard.CleanupSnapshots(earliestToRetain); err != nil {
 			multiErr = multiErr.Add(err)
 		}
 	}
@@ -562,14 +521,6 @@ func commitLogNamespaceBlockTimes(
 		Add(nsRetention.BufferFuture()).
 		Truncate(nsRetention.BlockSize())
 	return earliest, latest
-}
-
-func (m *cleanupManager) cleanupCommitLogs(filesToCleanup []commitLogFileWithErrorAndPath) error {
-	filesToDelete := make([]string, 0, len(filesToCleanup))
-	for _, f := range filesToCleanup {
-		filesToDelete = append(filesToDelete, f.path)
-	}
-	return m.deleteFilesFn(filesToDelete)
 }
 
 type commitLogFileWithErrorAndPath struct {

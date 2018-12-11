@@ -428,9 +428,6 @@ type databaseShard interface {
 	// SnapshotState returns the snapshot state for this shard.
 	SnapshotState() (isSnapshotting bool, lastSuccessfulSnapshot time.Time)
 
-	// CleanupSnapshots cleans up snapshot files.
-	CleanupSnapshots(earliestToRetain time.Time) error
-
 	// CleanupExpiredFileSets removes expired fileset files.
 	CleanupExpiredFileSets(earliestToRetain time.Time) error
 
