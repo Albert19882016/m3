@@ -40,6 +40,7 @@ import (
 )
 
 var (
+	// TODO: Fill this in
 	testCommitlogFile = persist.CommitlogFile{}
 )
 
