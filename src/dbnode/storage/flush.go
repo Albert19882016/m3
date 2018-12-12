@@ -146,11 +146,11 @@ func (m *flushManager) Flush(
 		multiErr = multiErr.Add(err)
 	}
 
+	// TODO: is this missing minimum time between snapshots?
 	rotatedCommitlogID, err := m.commitlog.RotateLogs()
 	if err != nil {
 		return fmt.Errorf("error rotating commitlog in mediator tick: %v", err)
 	}
-
 	err = m.snapshot(namespaces, tickStart, rotatedCommitlogID)
 	if err != nil {
 		multiErr = multiErr.Add(err)
