@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/m3db/m3/src/dbnode/persist"
+	"github.com/m3db/m3/src/dbnode/persist/fs/commitlog"
 	"github.com/m3db/m3/src/dbnode/retention"
 	xerrors "github.com/m3db/m3x/errors"
 	"github.com/pborman/uuid"
@@ -53,9 +54,10 @@ const (
 type flushManager struct {
 	sync.RWMutex
 
-	database database
-	opts     Options
-	pm       persist.Manager
+	database  database
+	commitlog commitlog.CommitLog
+	opts      Options
+	pm        persist.Manager
 	// isFlushingOrSnapshotting is used to protect the flush manager against
 	// concurrent use, while flushInProgress and snapshotInProgress are more
 	// granular and are used for emitting granular gauges.
@@ -69,10 +71,12 @@ type flushManager struct {
 	maxBlocksSnapshottedByNamespace tally.Gauge
 }
 
-func newFlushManager(database database, scope tally.Scope) databaseFlushManager {
+func newFlushManager(
+	database database, commitlog commitlog.CommitLog, scope tally.Scope) databaseFlushManager {
 	opts := database.Options()
 	return &flushManager{
 		database:                        database,
+		commitlog:                       commitlog,
 		opts:                            opts,
 		pm:                              opts.PersistManager(),
 		isFlushing:                      scope.Gauge("flush"),
@@ -142,7 +146,12 @@ func (m *flushManager) Flush(
 		multiErr = multiErr.Add(err)
 	}
 
-	err = m.snapshot(namespaces, tickStart)
+	rotatedCommitlogID, err := m.commitlog.RotateLogs()
+	if err != nil {
+		return fmt.Errorf("error rotating commitlog in mediator tick: %v", err)
+	}
+
+	err = m.snapshot(namespaces, tickStart, rotatedCommitlogID)
 	if err != nil {
 		multiErr = multiErr.Add(err)
 	}
@@ -175,6 +184,7 @@ func (m *flushManager) Flush(
 func (m *flushManager) snapshot(
 	namespaces []databaseNamespace,
 	tickStart time.Time,
+	rotatedCommitlogID commitlog.CommitLog,
 ) error {
 	snapshotPersist, err := m.pm.StartSnapshotPersist()
 	if err != nil {
@@ -208,7 +218,7 @@ func (m *flushManager) snapshot(
 	snapshotUUID := uuid.NewUUID()
 	// TODO(rartoul): Fill in the commitlog identifier here once the Rotate() API is hooked
 	// into the snapshotting process.
-	err = snapshotPersist.DoneSnapshot(snapshotUUID, persist.CommitlogFile{})
+	err = snapshotPersist.DoneSnapshot(snapshotUUID, rotatedCommitlogID)
 	if err != nil {
 		return err
 	}
