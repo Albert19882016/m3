@@ -184,7 +184,7 @@ func (m *flushManager) Flush(
 func (m *flushManager) snapshot(
 	namespaces []databaseNamespace,
 	tickStart time.Time,
-	rotatedCommitlogID commitlog.CommitLog,
+	rotatedCommitlogID persist.CommitlogFile,
 ) error {
 	snapshotPersist, err := m.pm.StartSnapshotPersist()
 	if err != nil {
