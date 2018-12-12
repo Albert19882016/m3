@@ -216,8 +216,6 @@ func (m *flushManager) snapshot(
 	m.maxBlocksSnapshottedByNamespace.Update(float64(maxBlocksSnapshottedByNamespace))
 
 	snapshotUUID := uuid.NewUUID()
-	// TODO(rartoul): Fill in the commitlog identifier here once the Rotate() API is hooked
-	// into the snapshotting process.
 	err = snapshotPersist.DoneSnapshot(snapshotUUID, rotatedCommitlogID)
 	if err != nil {
 		return err
